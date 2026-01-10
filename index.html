@@ -1,1 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingrescanner - Scan Barcode</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { margin:0; font-family:system-ui, sans-serif; background:#f0f4f8; color:#333; }
+    .container { max-width:420px; margin:40px auto; padding:24px; background:white; border-radius:20px; box-shadow:0 8px 32px rgba(0,0,0,0.1); text-align:center; }
+    h1 { color:#4a90e2; margin-bottom:8px; font-size:28px; }
+    .icon { font-size:90px; margin:24px 0; }
+    .text { color:#555; font-size:16px; line-height:1.5; margin-bottom:32px; }
+    button { background:#4a90e2; color:white; border:none; padding:16px 36px; font-size:18px; border-radius:12px; cursor:pointer; margin:12px 8px; transition:background 0.2s; }
+    button:hover { background:#357abd; }
+    .secondary { background:#e0e0e0; color:#333; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Scan Food Product</h1>
+    <div class="icon">📸</div>
+    <p class="text">Point your camera at the barcode on any food package.<br>Take a clear photo — we'll check ingredients & health info!</p>
 
+    <button onclick="launchScan()">Open Camera & Scan</button>
+    <button class="secondary" onclick="window.Telegram.WebApp.close()">Close</button>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    function launchScan() {
+      tg.showPopup({
+        title: "Ready?",
+        message: "Camera will open. Take photo of barcode and it will be sent to the bot.",
+        buttons: [{type:"ok", text:"Start"}]
+      });
+
+      // Optional: Try to access camera (triggers nice permission popup)
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(() => {
+          alert("Camera ready! Take photo & send it manually to the bot for now.");
+          tg.close();
+        })
+        .catch(() => {
+          tg.showAlert("Camera access needed. Allow it in settings & try again.");
+        });
+    }
+  </script>
+</body>
+</html>
