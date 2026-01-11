@@ -1,41 +1,99 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<style>
-  video { width: 100%; height: auto; background: #333; }
-  button { padding: 20px; font-size: 20px; margin: 20px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IngreScanner Live</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #reader {
+            width: 100%;
+            max-width: 600px;
+            background: #000;
+        }
+        /* Customizing the library's built-in UI to look dark */
+        #reader__dashboard_section_csr span { display: none; } /* Hide 'select camera' text */
+        button {
+            padding: 10px 20px;
+            margin-top: 10px;
+            background: #00ff9d;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #status { margin-top: 15px; color: #aaa; }
+    </style>
 </head>
 <body>
-<h2>Camera Test</h2>
-<video id="vid" autoplay muted playsinline></video>
-<div id="log"></div>
-<button onclick="startCam()">Start Camera</button>
 
-<script>
-async function startCam() {
-    const log = document.getElementById('log');
-    const vid = document.getElementById('vid');
-    
-    try {
-        log.innerHTML = "Requesting camera...";
-        // WE ASK FOR THE SIMPLEST CAMERA POSSIBLE (No HD, No Zoom)
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' } 
-        });
+    <div id="reader"></div>
+    <div id="status">Loading Scanner...</div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        const statusDiv = document.getElementById('status');
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // 1. Success! Barcode found.
+            console.log(`Code matched = ${decodedText}`, decodedResult);
+            
+            statusDiv.innerHTML = `✅ DETECTED: <b>${decodedText}</b><br>Sending to bot...`;
+            statusDiv.style.color = "#00ff9d";
+
+            // 2. Stop scanning to prevent duplicates
+            html5QrcodeScanner.clear();
+
+            // 3. Send to Python Bot
+            tg.sendData(decodedText);
+            
+            // 4. Close app (optional, or let sendData close it)
+            // setTimeout(() => tg.close(), 1000); 
+        }
+
+        function onScanFailure(error) {
+            // This fires continuously when looking for a code.
+            // We do nothing here to keep the UI clean.
+        }
+
+        // Configure specifically for FOOD BARCODES (EAN/UPC)
+        let config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            formatsToSupport: [ 
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_128
+            ]
+        };
+
+        // Initialize the scanner
+        // "reader" matches the div ID above
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", config, /* verbose= */ false);
         
-        log.innerHTML = "Stream received. Playing...";
-        vid.srcObject = stream;
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
         
-        // Force play
-        await vid.play();
-        log.innerHTML += "<br>Video shouldn't be black now.";
-        
-    } catch (err) {
-        log.innerHTML = "ERROR: " + err.name + ": " + err.message;
-        alert("Error: " + err.message);
-    }
-}
-</script>
+        statusDiv.textContent = "Please grant camera permission if asked.";
+    </script>
 </body>
 </html>
