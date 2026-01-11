@@ -3,97 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IngreScanner Live</title>
+    <title>IngreScan Final</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body {
             background-color: #000;
             color: #fff;
-            font-family: sans-serif;
+            font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
         }
+        h2 { margin-bottom: 10px; }
         #reader {
             width: 100%;
-            max-width: 600px;
-            background: #000;
+            max-width: 500px;
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 10px;
         }
-        /* Customizing the library's built-in UI to look dark */
-        #reader__dashboard_section_csr span { display: none; } /* Hide 'select camera' text */
-        button {
-            padding: 10px 20px;
-            margin-top: 10px;
-            background: #00ff9d;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #00ff9d;
+            text-align: center;
         }
-        #status { margin-top: 15px; color: #aaa; }
+        /* Hide the library's default "Stop Scanning" button to keep it clean */
+        #html5-qrcode-button-camera-stop { display: none !important; }
     </style>
 </head>
 <body>
 
+    <h2>Scan Food Barcode</h2>
     <div id="reader"></div>
-    <div id="status">Loading Scanner...</div>
+    <div id="result">Waiting for camera...</div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
 
-        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
 
         function onScanSuccess(decodedText, decodedResult) {
-            // 1. Success! Barcode found.
-            console.log(`Code matched = ${decodedText}`, decodedResult);
+            // 1. Show feedback to user
+            resultDiv.innerHTML = `✅ Found: ${decodedText}<br>Sending to bot...`;
             
-            statusDiv.innerHTML = `✅ DETECTED: <b>${decodedText}</b><br>Sending to bot...`;
-            statusDiv.style.color = "#00ff9d";
-
-            // 2. Stop scanning to prevent duplicates
-            html5QrcodeScanner.clear();
-
-            // 3. Send to Python Bot
+            // 2. Send data to Telegram Bot
             tg.sendData(decodedText);
             
-            // 4. Close app (optional, or let sendData close it)
-            // setTimeout(() => tg.close(), 1000); 
+            // 3. Stop the scanner securely
+            html5QrcodeScanner.clear();
         }
 
         function onScanFailure(error) {
-            // This fires continuously when looking for a code.
-            // We do nothing here to keep the UI clean.
+            // This function runs continuously when no code is found.
+            // We leave it empty to avoid spamming logs.
         }
 
-        // Configure specifically for FOOD BARCODES (EAN/UPC)
-        let config = {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-            formatsToSupport: [ 
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.CODE_128
-            ]
-        };
-
-        // Initialize the scanner
-        // "reader" matches the div ID above
+        // Initialize the Scanner
+        // This library automatically handles the "Request Permission" button for you
         let html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", config, /* verbose= */ false);
-        
+            "reader", 
+            { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                // Important: Support typical Food Barcodes
+                formatsToSupport: [ 
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E 
+                ]
+            },
+            /* verbose= */ false
+        );
+
+        // Render the camera
         html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-        
-        statusDiv.textContent = "Please grant camera permission if asked.";
     </script>
 </body>
 </html>
