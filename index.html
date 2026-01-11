@@ -1,53 +1,175 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ingrescanner - Scan Barcode</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ingrescanner – Live Barcode</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
-    body { margin:0; font-family:system-ui, sans-serif; background:#f0f4f8; color:#333; }
-    .container { max-width:420px; margin:40px auto; padding:24px; background:white; border-radius:20px; box-shadow:0 8px 32px rgba(0,0,0,0.1); text-align:center; }
-    h1 { color:#4a90e2; margin-bottom:8px; font-size:28px; }
-    .icon { font-size:90px; margin:24px 0; }
-    .text { color:#555; font-size:16px; line-height:1.5; margin-bottom:32px; }
-    button { background:#4a90e2; color:white; border:none; padding:16px 36px; font-size:18px; border-radius:12px; cursor:pointer; margin:12px 8px; transition:background 0.2s; }
-    button:hover { background:#357abd; }
-    .secondary { background:#e0e0e0; color:#333; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #000;
+      color: #fff;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+    #header {
+      text-align: center;
+      background: rgba(0,0,0,0.6);
+      padding: 12px;
+      border-radius: 12px;
+      backdrop-filter: blur(4px);
+    }
+    #guide {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 80%;
+      height: 35%;
+      border: 3px solid #00ff9d;
+      border-radius: 16px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);
+    }
+    #result {
+      text-align: center;
+      background: rgba(0,0,0,0.7);
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 1.2rem;
+      margin-top: auto;
+    }
+    #close-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: #ff3b30;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: bold;
+      z-index: 100;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Scan Food Product</h1>
-    <div class="icon">📸</div>
-    <p class="text">Point your camera at the barcode on any food package.<br>Take a clear photo — we'll check ingredients & health info!</p>
+  <div id="container">
+    <video id="video" autoplay playsinline></video>
+    <div id="overlay">
+      <div id="header">
+        <h2>Scan Food Barcode</h2>
+        <p>Align barcode inside the green frame</p>
+      </div>
 
-    <button onclick="launchScan()">Open Camera & Scan</button>
-    <button class="secondary" onclick="window.Telegram.WebApp.close()">Close</button>
+      <div id="guide"></div>
+
+      <div id="result">Point camera at barcode…</div>
+
+      <button id="close-btn">Close</button>
+    </div>
   </div>
 
   <script>
     const tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
+    tg.MainButton.setText("Scanning...").hide();
 
-    function launchScan() {
-      tg.showPopup({
-        title: "Ready?",
-        message: "Camera will open. Take photo of barcode and it will be sent to the bot.",
-        buttons: [{type:"ok", text:"Start"}]
-      });
+    const video = document.getElementById('video');
+    const resultDiv = document.getElementById('result');
+    const closeBtn = document.getElementById('close-btn');
 
-      // Optional: Try to access camera (triggers nice permission popup)
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(() => {
-          alert("Camera ready! Take photo & send it manually to the bot for now.");
-          tg.close();
-        })
-        .catch(() => {
-          tg.showAlert("Camera access needed. Allow it in settings & try again.");
-        });
-    }
+    let scanning = false;
+
+    // Start scanner
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: video,
+        constraints: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      },
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      numOfWorkers: navigator.hardwareConcurrency || 4,
+      frequency: 10,
+      decoder: {
+        readers: [
+          "ean_reader",       // EAN-13, EAN-8
+          "upc_reader",       // UPC-A, UPC-E
+          "code_128_reader"   // common on many packages
+        ]
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        resultDiv.textContent = "Error starting camera: " + err;
+        console.error(err);
+        return;
+      }
+
+      Quagga.start();
+      scanning = true;
+      resultDiv.textContent = "Scanning... Align the barcode";
+    });
+
+    // When barcode detected
+    Quagga.onDetected(function(data) {
+      const code = data.codeResult.code;
+      resultDiv.textContent = `Detected: ${code}`;
+
+      // Send barcode to bot and close
+      tg.sendData(code);
+
+      // Visual feedback
+      tg.MainButton.setText(`Barcode: ${code}`).show();
+
+      // Stop after detection (you can remove timeout if you want continuous)
+      setTimeout(() => {
+        Quagga.stop();
+        scanning = false;
+        tg.close();
+      }, 1800);
+    });
+
+    // Close button
+    closeBtn.onclick = () => {
+      if (scanning) Quagga.stop();
+      tg.close();
+    };
+
+    // Handle back/close from Telegram
+    tg.onEvent('web_app_close', () => {
+      if (scanning) Quagga.stop();
+    });
   </script>
 </body>
 </html>
