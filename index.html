@@ -1,106 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Ingrescanner – Live Barcode</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:system-ui; background:#000; color:#fff; height:100vh; overflow:hidden; }
-    #container { position:relative; width:100%; height:100%; }
-    #video { width:100%; height:100%; object-fit:cover; }
-    #overlay { position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column; justify-content:space-between; padding:20px; }
-    #header { text-align:center; background:rgba(0,0,0,0.6); padding:12px; border-radius:12px; backdrop-filter:blur(4px); }
-    #guide { position:absolute; inset:0; margin:auto; width:80%; height:40%; border:4px solid #00ff9d; border-radius:16px; box-shadow:0 0 0 9999px rgba(0,0,0,0.65); }
-    #result { text-align:center; background:rgba(0,0,0,0.7); padding:16px; border-radius:12px; font-size:1.2rem; margin-top:auto; }
-    #close-btn { position:absolute; top:16px; right:16px; background:#ff3b30; color:white; border:none; padding:12px 20px; border-radius:10px; font-weight:bold; z-index:100; cursor:pointer; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingrescanner</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8" type="text/javascript"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f0f0; text-align: center; margin:0; padding:20px; }
+        #reader { width: 100%; max-width: 500px; margin: 20px auto; border: 3px solid #333; border-radius: 10px; overflow: hidden; }
+        .status { margin-top: 20px; font-size: 18px; color: #333; font-weight: bold; }
+        h2 { color: #4a90e2; }
+        button { margin-top: 20px; padding: 12px 24px; background: #ff3b30; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+    </style>
 </head>
 <body>
-  <div id="container">
-    <video id="video" autoplay playsinline muted></video>
-    <div id="overlay">
-      <div id="header">
-        <h2>Scan Food Barcode</h2>
-        <p>Align barcode inside green frame</p>
-      </div>
-      <div id="guide"></div>
-      <div id="result">Loading camera...</div>
-      <button id="close-btn">Close</button>
-    </div>
-  </div>
+    <h2>Scan a Food Product</h2>
+    <div id="reader"></div>
+    <p class="status" id="status-text">Point camera at barcode...</p>
+    <button onclick="tg.close()">Close Scanner</button>
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
 
-    const video = document.getElementById('video');
-    const resultDiv = document.getElementById('result');
-    const closeBtn = document.getElementById('close-btn');
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById('status-text').innerText = "Success! Barcode: " + decodedText;
+            html5QrcodeScanner.clear();  // Stop scanning
+            tg.sendData(decodedText);    // Send to bot
+            setTimeout(() => tg.close(), 2000);  // Close after 2s
+        }
 
-    closeBtn.onclick = () => tg.close();
+        function onScanFailure(error) {
+            // Ignore minor errors, but log big ones
+            if (error.includes("No MultiFormat Readers were able")) {
+                // Silent ignore for normal scanning
+            } else {
+                console.error(error);
+            }
+        }
 
-    async function initCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } }
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            { 
+                fps: 15,                     // Faster scanning
+                qrbox: {width: 300, height: 200}, // Bigger scan area
+                aspectRatio: 1.777,          // Better for phone
+                videoConstraints: { facingMode: "environment" },
+                disableFlip: false
+            },
+            false
+        );
+
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+        // Show permission status
+        html5QrcodeScanner.getState().then(state => {
+            if (state === Html5QrcodeScannerState.NOT_STARTED) {
+                document.getElementById('status-text').innerText = "Waiting for camera permission...";
+            }
+        }).catch(err => {
+            document.getElementById('status-text').innerText = "Error: " + err;
         });
-        video.srcObject = stream;
-        video.play();
-
-        resultDiv.textContent = "Camera ready! Align barcode...";
-
-        Quagga.init({
-          inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target: video,
-            constraints: { facingMode: { ideal: "environment" } }
-          },
-          locator: {
-            patchSize: "large",    // Better for package barcodes
-            halfSample: true
-          },
-          numOfWorkers: navigator.hardwareConcurrency || 4,
-          frequency: 20,           // Scan faster
-          decoder: {
-            readers: [
-              "ean_reader", 
-              "upc_reader", 
-              "code_128_reader", 
-              "code_39_reader"     // Added more types
-            ]
-          },
-          locate: true
-        }, (err) => {
-          if (err) {
-            resultDiv.textContent = "Scanner error: " + err;
-            return;
-          }
-          Quagga.start();
-          resultDiv.textContent = "Scanning... Hold steady!";
-        });
-
-        Quagga.onDetected((data) => {
-          const code = data.codeResult.code;
-          resultDiv.textContent = `Detected: ${code}`;
-          tg.sendData(code);  // Send to bot!
-          setTimeout(() => {
-            Quagga.stop();
-            tg.close();
-          }, 1500);
-        });
-
-      } catch (err) {
-        resultDiv.textContent = "Camera failed: " + err.message;
-        console.error(err);
-      }
-    }
-
-    initCamera(); // Start automatically
-  </script>
+    </script>
 </body>
 </html>
